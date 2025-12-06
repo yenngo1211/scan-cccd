@@ -3,16 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <title>Quét CCCD</title>
-<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
+
 <h2>Quét QR CCCD</h2>
 
-<label>Employee Code: <input type="text" id="EmployeeCode" required></label><br><br>
+<label>Employee Code:</label>
+<input type="text" id="EmployeeCode" required><br><br>
 
 <div id="reader" style="width:300px;"></div>
 
-<form id="cccdForm" action="https://forms.office.com/Pages/ResponsePage.aspx?id=bvGrKaKVE02NUW2xt3XUW55Dn4IDf4VHgy8suSEk5GxURDNLM1ZBVU9VRTM0VlA4QTRDRVJKMFZaUi4u" method="POST" target="_blank">
+<!-- iFrame ẩn để submit form mà không mở trang -->
+<iframe name="hiddenFrame" style="display:none;"></iframe>
+
+<form id="cccdForm"
+      action="https://forms.office.com/Pages/ResponsePage.aspx?id=bvGrKaKVE02NUW2xt3XUW55Dn4IDf4VHgy8suSEk5GxURDNLM1ZBVU9VRTM0VlA4QTRDRVJKMFZaUi4u"
+      method="POST"
+      target="hiddenFrame">
+
   <input type="hidden" name="CCCD" id="CCCD">
   <input type="hidden" name="CMND" id="CMND">
   <input type="hidden" name="FullName" id="FullName">
@@ -20,66 +29,54 @@
   <input type="hidden" name="Gender" id="Gender">
   <input type="hidden" name="Address" id="Address">
   <input type="hidden" name="IssueDate" id="IssueDate">
-  <input type="hidden" name="EmployeeCodeHidden" id="EmployeeCodeHidden">
-  <button type="submit">Submit</button>
+  <input type="hidden" name="EmployeeCode" id="EmployeeCodeHidden">
+
+  <button type="submit" id="btnSubmit" disabled>Đang chờ quét...</button>
 </form>
 
 <script>
-// Hàm đổi định dạng ngày ddMMyyyy -> dd/MM/yyyy
-function formatDate(dateStr) {
-    if (!dateStr || dateStr.length !== 8) return dateStr;
-    let dd = dateStr.substring(0, 2);
-    let mm = dateStr.substring(2, 4);
-    let yyyy = dateStr.substring(4, 8);
-    return `${dd}/${mm}/${yyyy}`;
+// format ddMMyyyy -> dd/MM/yyyy
+function formatDate(s) {
+    if (s.length !== 8) return s;
+    return `${s.slice(0,2)}/${s.slice(2,4)}/${s.slice(4)}`;
 }
 
-function onScanSuccess(decodedText, decodedResult) {
-    try {
-        // Tách theo ký tự |
-        // Với dữ liệu: |xxxx|yyyy|...|||  → ta loại phần tử rỗng
-        let parts = decodedText.split("|").filter(item => item.trim() !== "");
-
-        // Sau khi loại phần tử rỗng, đúng phải còn 7 phần tử
-        if (parts.length !== 7) {
-            alert("QR CCCD không đúng định dạng!");
-            return;
-        }
-
-        let cccd      = parts[0];
-        let cmnd      = parts[1];
-        let fullname  = parts[2];
-        let dob       = formatDate(parts[3]);
-        let gender    = parts[4];
-        let address   = parts[5];
-        let issueDate = formatDate(parts[6]);
-
-        document.getElementById("CCCD").value = cccd;
-        document.getElementById("CMND").value = cmnd;
-        document.getElementById("FullName").value = fullname;
-        document.getElementById("DOB").value = dob;
-        document.getElementById("Gender").value = gender;
-        document.getElementById("Address").value = address;
-        document.getElementById("IssueDate").value = issueDate;
-
-        // Employee code
-        let empCode = document.getElementById("EmployeeCode").value.trim();
-        if (!empCode) {
-            alert("Vui lòng nhập Employee Code trước khi Submit!");
-            return;
-        }
-        document.getElementById("EmployeeCodeHidden").value = empCode;
-
-        alert("Đã quét QR thành công!");
-    } catch (e) {
-        alert("QR code không hợp lệ!");
+function onScanSuccess(decodedText) {
+    let arr = decodedText.split("|").filter(x => x.trim() !== "");
+    if (arr.length !== 7) {
+        alert("QR không đúng định dạng CCCD!");
+        return;
     }
+
+    document.getElementById("CCCD").value = arr[0];
+    document.getElementById("CMND").value = arr[1];
+    document.getElementById("FullName").value = arr[2];
+    document.getElementById("DOB").value = formatDate(arr[3]);
+    document.getElementById("Gender").value = arr[4];
+    document.getElementById("Address").value = arr[5];
+    document.getElementById("IssueDate").value = formatDate(arr[6]);
+
+    document.getElementById("btnSubmit").disabled = false;
+    document.getElementById("btnSubmit").innerText = "Submit";
+
+    alert("Đã quét thành công!");
 }
 
-var html5QrcodeScanner = new Html5QrcodeScanner(
-    "reader", { fps: 10, qrbox: 250 });
-html5QrcodeScanner.render(onScanSuccess);
+new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }).render(onScanSuccess);
+
+// Chặn submit nếu thiếu Employee Code
+document.getElementById("cccdForm").addEventListener("submit", function(e) {
+    let emp = document.getElementById("EmployeeCode").value.trim();
+    if (!emp) {
+        alert("Vui lòng nhập Employee Code trước khi submit!");
+        e.preventDefault();
+        return false;
+    }
+    document.getElementById("EmployeeCodeHidden").value = emp;
+
+    alert("Gửi thành công!");
+});
 </script>
+
 </body>
 </html>
-
