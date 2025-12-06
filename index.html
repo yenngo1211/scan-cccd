@@ -24,6 +24,7 @@
       const [submitting, setSubmitting] = useState(false);
       const [message, setMessage] = useState({ type: '', text: '' });
       const [debugInfo, setDebugInfo] = useState('');
+      const [capturedImage, setCapturedImage] = useState(null);
       const [showAdmin, setShowAdmin] = useState(false);
       const [adminPassword, setAdminPassword] = useState('');
       const [records, setRecords] = useState([]);
@@ -212,6 +213,46 @@
         if (parsed) {
           setCccdData(parsed);
           setMessage({ type: 'success', text: 'Đã load dữ liệu test!' });
+        }
+      };
+
+      const handleCaptureImage = () => {
+        if (videoRef.current && canvasRef.current) {
+          const video = videoRef.current;
+          const canvas = canvasRef.current;
+          const context = canvas.getContext('2d');
+          
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          const imageData = canvas.toDataURL('image/png');
+          setCapturedImage(imageData);
+          setDebugInfo('Đã chụp ảnh! Đang phân tích...');
+          
+          // Thử đọc QR từ ảnh vừa chụp
+          const imgData = context.getImageData(0, 0, canvas.width, canvas.height);
+          if (typeof jsQR !== 'undefined') {
+            const code = jsQR(imgData.data, imgData.width, imgData.height, {
+              inversionAttempts: "attemptBoth",
+            });
+            
+            if (code && code.data) {
+              setDebugInfo('Phát hiện QR: ' + code.data);
+              const parsed = parseCCCDData(code.data);
+              if (parsed) {
+                setCccdData(parsed);
+                stopCamera();
+                setMessage({ type: 'success', text: 'Quét mã thành công từ ảnh!' });
+              } else {
+                setDebugInfo('Mã QR không đúng định dạng. Nội dung: ' + code.data.substring(0, 100));
+              }
+            } else {
+              setDebugInfo('Không phát hiện mã QR trong ảnh. Hãy thử lại.');
+            }
+          } else {
+            setDebugInfo('Lỗi: jsQR library chưa load!');
+          }
         }
       };
 
@@ -409,12 +450,30 @@
                       </div>
                     </div>
                     <canvas ref={canvasRef} className="hidden" />
-                    <button
-                      onClick={stopCamera}
-                      className="w-full mt-3 px-4 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition"
-                    >
-                      Dừng quét
-                    </button>
+                    
+                    {/* Nút chụp ảnh để debug */}
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={handleCaptureImage}
+                        className="flex-1 px-4 py-3 bg-yellow-500 text-white rounded-lg font-medium hover:bg-yellow-600 transition"
+                      >
+                        📸 Chụp & Phân tích
+                      </button>
+                      <button
+                        onClick={stopCamera}
+                        className="flex-1 px-4 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition"
+                      >
+                        Dừng quét
+                      </button>
+                    </div>
+                    
+                    {/* Hiển thị ảnh đã chụp */}
+                    {capturedImage && (
+                      <div className="mt-3">
+                        <p className="text-sm font-medium mb-2">Ảnh vừa chụp:</p>
+                        <img src={capturedImage} alt="Captured" className="w-full rounded-lg border-2 border-yellow-400" />
+                      </div>
+                    )}
                   </div>
                 )}
 
