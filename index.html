@@ -148,16 +148,19 @@
             
             if (typeof jsQR !== 'undefined') {
               const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                inversionAttempts: "dontInvert",
+                inversionAttempts: "attemptBoth",
               });
 
-              if (code) {
+              if (code && code.data) {
+                setDebugInfo('Đã phát hiện mã QR: ' + code.data.substring(0, 50) + '...');
                 const parsed = parseCCCDData(code.data);
                 if (parsed) {
                   setCccdData(parsed);
                   stopCamera();
                   setMessage({ type: 'success', text: 'Quét mã thành công!' });
                   return;
+                } else {
+                  setDebugInfo('Mã QR không đúng định dạng CCCD. Thử lại...');
                 }
               }
             }
@@ -397,7 +400,6 @@
                         playsInline
                         muted
                         className="w-full h-full object-cover"
-                        style={{ transform: 'scaleX(-1)' }}
                       />
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="w-64 h-64 border-2 border-white rounded-lg opacity-70"></div>
