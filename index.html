@@ -3,32 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CCCD Scanner - Quét CCCD</title>
+  <title>CCCD Scanner - Google Sheets</title>
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  
-  <!-- Fallback cho jsQR -->
-  <script>
-    window.addEventListener('load', function() {
-      if (typeof jsQR === 'undefined') {
-        console.error('jsQR failed to load from CDN');
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
-        document.head.appendChild(script);
-      }
-    });
-  </script>
 </head>
 <body>
   <div id="root"></div>
-  
+
   <script type="text/babel">
     const { useState, useRef, useEffect } = React;
-    
+
     function CCCDScanner() {
       const [scanning, setScanning] = useState(false);
       const [cccdData, setCccdData] = useState(null);
@@ -37,32 +24,18 @@
       const [message, setMessage] = useState({ type: '', text: '' });
       const [debugInfo, setDebugInfo] = useState('');
       const [capturedImage, setCapturedImage] = useState(null);
-      const [showAdmin, setShowAdmin] = useState(false);
-      const [adminPassword, setAdminPassword] = useState('');
-      const [records, setRecords] = useState([]);
       const videoRef = useRef(null);
       const canvasRef = useRef(null);
       const streamRef = useRef(null);
       const scanningRef = useRef(false);
 
-      // Kiểm tra jsQR đã load chưa
-      useEffect(() => {
-        const checkJsQR = () => {
-          if (typeof jsQR !== 'undefined') {
-            setDebugInfo('jsQR library đã sẵn sàng ✓');
-          } else {
-            setDebugInfo('Đang tải jsQR library...');
-            setTimeout(checkJsQR, 500);
-          }
-        };
-        checkJsQR();
-      }, []);
+      const GOOGLE_SHEET_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbw-WP7BkRvFxjP56OP3AUXS3T0mjZcM5bfGjgEs3ziWEi9cQxEOyNyIBaiFuxIlo_-Y/exec";
 
-      // Load dữ liệu từ localStorage
       useEffect(() => {
-        const saved = localStorage.getItem('cccdRecords');
-        if (saved) {
-          setRecords(JSON.parse(saved));
+        if (typeof jsQR !== 'undefined') {
+          setDebugInfo('jsQR library đã sẵn sàng ✓');
+        } else {
+          setDebugInfo('Đang tải jsQR library...');
         }
       }, []);
 
@@ -78,14 +51,12 @@
         try {
           const parts = qrText.split('|');
           if (parts.length >= 7) {
-            // Format ngày từ ddmmyyyy sang dd/mm/yyyy
             const formatDate = (dateStr) => {
               if (dateStr && dateStr.length === 8) {
                 return `${dateStr.substring(0,2)}/${dateStr.substring(2,4)}/${dateStr.substring(4,8)}`;
               }
               return dateStr;
             };
-            
             return {
               soCCCD: parts[0] || '',
               cmnd: parts[1] || '',
@@ -97,7 +68,7 @@
             };
           }
           return null;
-        } catch (error) {
+        } catch (err) {
           return null;
         }
       };
@@ -106,47 +77,23 @@
         try {
           setDebugInfo('Đang yêu cầu quyền camera...');
           setMessage({ type: '', text: '' });
-          
-          // Bật scanning ngay để hiển thị UI
           setScanning(true);
-          
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: { 
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            }
+            video: { facingMode: { ideal: 'environment' }, width: 1280, height: 720 }
           });
-          
-          setDebugInfo('Đã có quyền camera, đang khởi động video...');
-          
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             streamRef.current = stream;
             scanningRef.current = true;
-            
-            // Đợi video sẵn sàng
             await videoRef.current.play();
             setDebugInfo('Camera đang hoạt động! Đưa mã QR vào khung.');
-            
-            // Bắt đầu quét
             requestAnimationFrame(scanQRCode);
           }
-        } catch (error) {
-          console.error('Camera error:', error);
+        } catch (err) {
+          console.error(err);
           setScanning(false);
-          setDebugInfo('Lỗi: ' + error.name + ' - ' + error.message);
-          let errorMsg = 'Không thể truy cập camera. ';
-          if (error.name === 'NotAllowedError') {
-            errorMsg += 'Vui lòng cấp quyền camera trong cài đặt trình duyệt.';
-          } else if (error.name === 'NotFoundError') {
-            errorMsg += 'Không tìm thấy camera trên thiết bị.';
-          } else if (error.name === 'NotReadableError') {
-            errorMsg += 'Camera đang được ứng dụng khác sử dụng.';
-          } else {
-            errorMsg += error.message;
-          }
-          setMessage({ type: 'error', text: errorMsg });
+          setDebugInfo('Lỗi camera: ' + err.message);
+          setMessage({ type: 'error', text: 'Không thể truy cập camera. Vui lòng kiểm tra quyền.' });
         }
       };
 
@@ -156,17 +103,13 @@
           streamRef.current.getTracks().forEach(track => track.stop());
           streamRef.current = null;
         }
-        if (videoRef.current) {
-          videoRef.current.srcObject = null;
-        }
+        if (videoRef.current) videoRef.current.srcObject = null;
         setScanning(false);
         setDebugInfo('');
       };
 
       const scanQRCode = () => {
-        if (!scanningRef.current || !videoRef.current || !canvasRef.current) {
-          return;
-        }
+        if (!scanningRef.current || !videoRef.current || !canvasRef.current) return;
 
         const video = videoRef.current;
         const canvas = canvasRef.current;
@@ -175,39 +118,26 @@
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
-          
-          if (canvas.width > 0 && canvas.height > 0) {
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-            
-            // Kiểm tra jsQR có tồn tại không
-            if (typeof window.jsQR !== 'undefined') {
-              const code = window.jsQR(imageData.data, imageData.width, imageData.height, {
-                inversionAttempts: "attemptBoth",
-              });
-
-              if (code && code.data) {
-                setDebugInfo('Đã phát hiện mã QR: ' + code.data.substring(0, 50) + '...');
-                const parsed = parseCCCDData(code.data);
-                if (parsed) {
-                  setCccdData(parsed);
-                  stopCamera();
-                  setMessage({ type: 'success', text: 'Quét mã thành công!' });
-                  return;
-                } else {
-                  setDebugInfo('Mã QR không đúng định dạng CCCD. Thử lại...');
-                }
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          if (typeof window.jsQR !== 'undefined') {
+            const code = window.jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+            if (code && code.data) {
+              setDebugInfo('Đã phát hiện mã QR: ' + code.data.substring(0, 50) + '...');
+              const parsed = parseCCCDData(code.data);
+              if (parsed) {
+                setCccdData(parsed);
+                stopCamera();
+                setMessage({ type: 'success', text: 'Quét mã thành công!' });
+                return;
+              } else {
+                setDebugInfo('Mã QR không đúng định dạng CCCD.');
               }
-            } else {
-              // Nếu jsQR chưa load, thử load lại
-              setDebugInfo('jsQR đang tải, vui lòng đợi...');
             }
           }
         }
 
-        if (scanningRef.current) {
-          requestAnimationFrame(scanQRCode);
-        }
+        if (scanningRef.current) requestAnimationFrame(scanQRCode);
       };
 
       const handleSubmit = () => {
@@ -219,10 +149,9 @@
         setSubmitting(true);
 
         const newRecord = {
-          id: Date.now(),
           thoiGian: new Date().toLocaleString('vi-VN'),
           soCCCD: cccdData.soCCCD,
-          cmnd: cccdData.cmnd,
+          cmnd: cccdData.cmnd || '',
           hoTen: cccdData.hoTen,
           ngaySinh: cccdData.ngaySinh,
           gioiTinh: cccdData.gioiTinh,
@@ -231,18 +160,27 @@
           maNV: maNV
         };
 
-        const updatedRecords = [...records, newRecord];
-        setRecords(updatedRecords);
-        localStorage.setItem('cccdRecords', JSON.stringify(updatedRecords));
-
-        setMessage({ type: 'success', text: 'Lưu thông tin thành công!' });
-        setSubmitting(false);
-        setCccdData(null);
-        setMaNV('');
-        
-        setTimeout(() => {
-          setMessage({ type: '', text: '' });
-        }, 3000);
+        fetch(GOOGLE_SHEET_WEBAPP_URL, {
+          method: "POST",
+          body: JSON.stringify(newRecord),
+          headers: { "Content-Type": "application/json" }
+        })
+        .then(res => res.json())
+        .then(data => {
+          if(data.status === 'success'){
+            setMessage({ type: 'success', text: 'Đã lưu lên Google Sheets thành công!' });
+            setCccdData(null);
+            setMaNV('');
+          } else {
+            setMessage({ type: 'error', text: 'Lỗi khi lưu dữ liệu: ' + data.message });
+          }
+          setSubmitting(false);
+        })
+        .catch(err => {
+          console.error(err);
+          setMessage({ type: 'error', text: 'Lỗi khi gửi dữ liệu!' });
+          setSubmitting(false);
+        });
       };
 
       const handleTestInput = () => {
@@ -255,41 +193,29 @@
       };
 
       const handleCaptureImage = () => {
-        if (videoRef.current && canvasRef.current) {
-          const video = videoRef.current;
-          const canvas = canvasRef.current;
-          const context = canvas.getContext('2d');
-          
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
-          
-          const imageData = canvas.toDataURL('image/png');
-          setCapturedImage(imageData);
-          setDebugInfo('Đã chụp ảnh! Đang phân tích...');
-          
-          // Thử đọc QR từ ảnh vừa chụp
-          const imgData = context.getImageData(0, 0, canvas.width, canvas.height);
-          if (typeof window.jsQR !== 'undefined') {
-            const code = window.jsQR(imgData.data, imgData.width, imgData.height, {
-              inversionAttempts: "attemptBoth",
-            });
-            
-            if (code && code.data) {
-              setDebugInfo('Phát hiện QR: ' + code.data);
-              const parsed = parseCCCDData(code.data);
-              if (parsed) {
-                setCccdData(parsed);
-                stopCamera();
-                setMessage({ type: 'success', text: 'Quét mã thành công từ ảnh!' });
-              } else {
-                setDebugInfo('Mã QR không đúng định dạng. Nội dung: ' + code.data.substring(0, 100));
-              }
+        if (!videoRef.current || !canvasRef.current) return;
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        setCapturedImage(canvas.toDataURL('image/png'));
+
+        const imgData = context.getImageData(0, 0, canvas.width, canvas.height);
+        if (typeof window.jsQR !== 'undefined') {
+          const code = window.jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: "attemptBoth" });
+          if (code && code.data) {
+            const parsed = parseCCCDData(code.data);
+            if (parsed) {
+              setCccdData(parsed);
+              stopCamera();
+              setMessage({ type: 'success', text: 'Quét mã thành công từ ảnh!' });
             } else {
-              setDebugInfo('Không phát hiện mã QR trong ảnh. Hãy thử lại hoặc di chuyển camera gần hơn.');
+              setDebugInfo('Mã QR không đúng định dạng: ' + code.data.substring(0,100));
             }
           } else {
-            setDebugInfo('LỖI: jsQR library chưa load! Vui lòng reload trang (F5).');
+            setDebugInfo('Không phát hiện mã QR trong ảnh.');
           }
         }
       };
@@ -299,159 +225,6 @@
         setMaNV('');
         setMessage({ type: '', text: '' });
       };
-
-      const handleAdminLogin = () => {
-        if (adminPassword === 'admin123') {
-          setShowAdmin(true);
-          setAdminPassword('');
-          setMessage({ type: '', text: '' });
-        } else {
-          setMessage({ type: 'error', text: 'Sai mật khẩu!' });
-        }
-      };
-
-      const handleExportExcel = () => {
-        if (records.length === 0) {
-          setMessage({ type: 'error', text: 'Chưa có dữ liệu để export!' });
-          return;
-        }
-
-        const worksheet = XLSX.utils.json_to_sheet(records.map(r => ({
-          'Thời gian': r.thoiGian,
-          'Số CCCD': r.soCCCD,
-          'Số CMND cũ': r.cmnd || '',
-          'Họ tên': r.hoTen,
-          'Ngày sinh': r.ngaySinh,
-          'Giới tính': r.gioiTinh,
-          'Địa chỉ': r.diaChi,
-          'Ngày cấp': r.ngayCap,
-          'Mã NV': r.maNV
-        })));
-
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh sách');
-        XLSX.writeFile(workbook, `CCCD_Records_${new Date().toLocaleDateString('vi-VN')}.xlsx`);
-        
-        setMessage({ type: 'success', text: 'Đã tải file Excel!' });
-      };
-
-      const handleDeleteRecord = (id) => {
-        const updatedRecords = records.filter(r => r.id !== id);
-        setRecords(updatedRecords);
-        localStorage.setItem('cccdRecords', JSON.stringify(updatedRecords));
-        setMessage({ type: 'success', text: 'Đã xóa!' });
-      };
-
-      const handleClearAll = () => {
-        if (window.confirm('Xóa toàn bộ dữ liệu? Hành động này không thể hoàn tác!')) {
-          setRecords([]);
-          localStorage.removeItem('cccdRecords');
-          setMessage({ type: 'success', text: 'Đã xóa toàn bộ dữ liệu!' });
-        }
-      };
-
-      if (showAdmin) {
-        return (
-          <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-            <div className="max-w-6xl mx-auto">
-              <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-                <div className="bg-gradient-to-r from-slate-700 to-slate-900 p-6 text-white">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h1 className="text-2xl font-bold">Quản lý dữ liệu CCCD</h1>
-                      <p className="text-slate-300 text-sm mt-1">Tổng: {records.length} bản ghi</p>
-                    </div>
-                    <button
-                      onClick={() => setShowAdmin(false)}
-                      className="px-4 py-2 bg-white text-slate-800 rounded-lg font-medium hover:bg-slate-100 transition"
-                    >
-                      Đóng
-                    </button>
-                  </div>
-                </div>
-
-                <div className="p-6">
-                  {message.text && (
-                    <div className={`mb-4 p-4 rounded-lg ${
-                      message.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-                    }`}>
-                      {message.text}
-                    </div>
-                  )}
-
-                  <div className="flex gap-3 mb-6">
-                    <button
-                      onClick={handleExportExcel}
-                      className="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition flex items-center gap-2"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      Tải Excel
-                    </button>
-                    <button
-                      onClick={handleClearAll}
-                      className="px-6 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition"
-                    >
-                      Xóa tất cả
-                    </button>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-100">
-                        <tr>
-                          <th className="px-4 py-3 text-left font-semibold">Thời gian</th>
-                          <th className="px-4 py-3 text-left font-semibold">Số CCCD</th>
-                          <th className="px-4 py-3 text-left font-semibold">Số CMND</th>
-                          <th className="px-4 py-3 text-left font-semibold">Họ tên</th>
-                          <th className="px-4 py-3 text-left font-semibold">Ngày sinh</th>
-                          <th className="px-4 py-3 text-left font-semibold">Giới tính</th>
-                          <th className="px-4 py-3 text-left font-semibold">Địa chỉ</th>
-                          <th className="px-4 py-3 text-left font-semibold">Ngày cấp</th>
-                          <th className="px-4 py-3 text-left font-semibold">Mã NV</th>
-                          <th className="px-4 py-3 text-left font-semibold">Thao tác</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {records.length === 0 ? (
-                          <tr>
-                            <td colSpan="10" className="px-4 py-8 text-center text-gray-500">
-                              Chưa có dữ liệu
-                            </td>
-                          </tr>
-                        ) : (
-                          records.map(record => (
-                            <tr key={record.id} className="border-t hover:bg-slate-50">
-                              <td className="px-4 py-3">{record.thoiGian}</td>
-                              <td className="px-4 py-3">{record.soCCCD}</td>
-                              <td className="px-4 py-3">{record.cmnd || '-'}</td>
-                              <td className="px-4 py-3">{record.hoTen}</td>
-                              <td className="px-4 py-3">{record.ngaySinh}</td>
-                              <td className="px-4 py-3">{record.gioiTinh}</td>
-                              <td className="px-4 py-3 max-w-xs truncate" title={record.diaChi}>{record.diaChi}</td>
-                              <td className="px-4 py-3">{record.ngayCap}</td>
-                              <td className="px-4 py-3 font-medium">{record.maNV}</td>
-                              <td className="px-4 py-3">
-                                <button
-                                  onClick={() => handleDeleteRecord(record.id)}
-                                  className="text-red-600 hover:text-red-800 font-medium"
-                                >
-                                  Xóa
-                                </button>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      }
 
       return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -463,30 +236,25 @@
               </div>
 
               <div className="p-6">
-                {debugInfo && (
-                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-xs">
-                    <strong>Debug:</strong> {debugInfo}
-                  </div>
-                )}
+                {debugInfo && <div className="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-xs"><strong>Debug:</strong> {debugInfo}</div>}
+                {message.text && <div className={`mb-4 p-4 rounded-lg flex items-center gap-2 ${message.type==='success'?'bg-green-50 text-green-800':'bg-red-50 text-red-800'}`}><span className="text-sm">{message.text}</span></div>}
 
-                {message.text && (
-                  <div className={`mb-4 p-4 rounded-lg flex items-center gap-2 ${
-                    message.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-                  }`}>
-                    <span className="text-sm">{message.text}</span>
+                {!scanning && !cccdData && (
+                  <div className="space-y-3">
+                    <button onClick={startCamera} className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition flex items-center justify-center gap-2">
+                      Quét mã QR CCCD
+                    </button>
+                    <button onClick={handleTestInput} className="w-full px-4 py-2 border-2 border-gray-300 text-gray-600 rounded-lg font-medium hover:bg-gray-50 transition text-sm">
+                      🧪 Test với dữ liệu mẫu
+                    </button>
                   </div>
                 )}
 
                 {scanning && (
                   <div className="mb-6">
                     <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: '4/3' }}>
-                      <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="w-full h-full object-cover"
-                      />
+                      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                      <canvas ref={canvasRef} className="hidden" />
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="w-64 h-64 border-2 border-white rounded-lg opacity-70"></div>
                       </div>
@@ -494,25 +262,10 @@
                         Đặt mã QR vào khung vuông
                       </div>
                     </div>
-                    <canvas ref={canvasRef} className="hidden" />
-                    
-                    {/* Nút chụp ảnh để debug */}
                     <div className="flex gap-2 mt-3">
-                      <button
-                        onClick={handleCaptureImage}
-                        className="flex-1 px-4 py-3 bg-yellow-500 text-white rounded-lg font-medium hover:bg-yellow-600 transition"
-                      >
-                        📸 Chụp & Phân tích
-                      </button>
-                      <button
-                        onClick={stopCamera}
-                        className="flex-1 px-4 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition"
-                      >
-                        Dừng quét
-                      </button>
+                      <button onClick={handleCaptureImage} className="flex-1 px-4 py-3 bg-yellow-500 text-white rounded-lg font-medium hover:bg-yellow-600 transition">📸 Chụp & Phân tích</button>
+                      <button onClick={stopCamera} className="flex-1 px-4 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition">Dừng quét</button>
                     </div>
-                    
-                    {/* Hiển thị ảnh đã chụp */}
                     {capturedImage && (
                       <div className="mt-3">
                         <p className="text-sm font-medium mb-2">Ảnh vừa chụp:</p>
@@ -522,61 +275,18 @@
                   </div>
                 )}
 
-                {!scanning && !cccdData && (
-                  <div className="space-y-3">
-                    <button
-                      onClick={startCamera}
-                      className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      Quét mã QR CCCD
-                    </button>
-                    
-                    <button
-                      onClick={handleTestInput}
-                      className="w-full px-4 py-2 border-2 border-gray-300 text-gray-600 rounded-lg font-medium hover:bg-gray-50 transition text-sm"
-                    >
-                      🧪 Test với dữ liệu mẫu
-                    </button>
-                  </div>
-                )}
-
                 {cccdData && (
                   <div className="space-y-4 mb-6">
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                       <h3 className="font-semibold text-green-800 mb-3">Thông tin CCCD:</h3>
                       <div className="space-y-2 text-sm">
-                        <div className="flex">
-                          <span className="font-medium w-32">Số CCCD:</span>
-                          <span>{cccdData.soCCCD}</span>
-                        </div>
-                        <div className="flex">
-                          <span className="font-medium w-32">Số CMND cũ:</span>
-                          <span>{cccdData.cmnd || 'Không có'}</span>
-                        </div>
-                        <div className="flex">
-                          <span className="font-medium w-32">Họ tên:</span>
-                          <span>{cccdData.hoTen}</span>
-                        </div>
-                        <div className="flex">
-                          <span className="font-medium w-32">Ngày sinh:</span>
-                          <span>{cccdData.ngaySinh}</span>
-                        </div>
-                        <div className="flex">
-                          <span className="font-medium w-32">Giới tính:</span>
-                          <span>{cccdData.gioiTinh}</span>
-                        </div>
-                        <div className="flex">
-                          <span className="font-medium w-32">Địa chỉ:</span>
-                          <span className="flex-1">{cccdData.diaChi}</span>
-                        </div>
-                        <div className="flex">
-                          <span className="font-medium w-32">Ngày cấp:</span>
-                          <span>{cccdData.ngayCap}</span>
-                        </div>
+                        <div className="flex"><span className="font-medium w-32">Số CCCD:</span><span>{cccdData.soCCCD}</span></div>
+                        <div className="flex"><span className="font-medium w-32">Số CMND cũ:</span><span>{cccdData.cmnd || 'Không có'}</span></div>
+                        <div className="flex"><span className="font-medium w-32">Họ tên:</span><span>{cccdData.hoTen}</span></div>
+                        <div className="flex"><span className="font-medium w-32">Ngày sinh:</span><span>{cccdData.ngaySinh}</span></div>
+                        <div className="flex"><span className="font-medium w-32">Giới tính:</span><span>{cccdData.gioiTinh}</span></div>
+                        <div className="flex"><span className="font-medium w-32">Địa chỉ:</span><span className="flex-1">{cccdData.diaChi}</span></div>
+                        <div className="flex"><span className="font-medium w-32">Ngày cấp:</span><span>{cccdData.ngayCap}</span></div>
                       </div>
                     </div>
 
@@ -584,71 +294,19 @@
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Mã số nhân viên <span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="text"
-                        value={maNV}
-                        onChange={(e) => setMaNV(e.target.value)}
-                        placeholder="Nhập mã NV"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      />
+                      <input type="text" value={maNV} onChange={(e)=>setMaNV(e.target.value)} placeholder="Nhập mã NV" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"/>
                     </div>
 
                     <div className="flex gap-3">
-                      <button
-                        onClick={handleReset}
-                        className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition"
-                      >
-                        Quét lại
-                      </button>
-                      <button
-                        onClick={handleSubmit}
-                        disabled={submitting}
-                        className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg font-medium hover:from-green-700 hover:to-green-800 transition disabled:opacity-50 flex items-center justify-center gap-2"
-                      >
-                        {submitting ? (
-                          <span>Đang lưu...</span>
-                        ) : (
-                          <>
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            Lưu
-                          </>
-                        )}
+                      <button onClick={handleReset} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition">Quét lại</button>
+                      <button onClick={handleSubmit} disabled={submitting} className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg font-medium hover:from-green-700 hover:to-green-800 transition disabled:opacity-50">
+                        {submitting ? 'Đang lưu...' : 'Lưu'}
                       </button>
                     </div>
                   </div>
                 )}
-
-                <div className="mt-6 pt-6 border-t space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Mật khẩu HR (để xem dữ liệu)
-                    </label>
-                    <input
-                      type="password"
-                      value={adminPassword}
-                      onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="Nhập mật khẩu"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
-                    />
-                  </div>
-                  <button
-                    onClick={handleAdminLogin}
-                    className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg font-medium hover:bg-slate-800 transition"
-                  >
-                    🔒 Xem dữ liệu (HR)
-                  </button>
-                  <p className="text-xs text-gray-500 text-center">
-                    Mật khẩu mặc định: admin123
-                  </p>
-                </div>
               </div>
             </div>
-
-            <p className="text-center text-gray-600 text-sm mt-4">
-              Dành cho nhân viên công ty • Đã lưu: {records.length} bản ghi
-            </p>
           </div>
         </div>
       );
