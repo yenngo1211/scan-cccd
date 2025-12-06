@@ -1,82 +1,18 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8">
-<title>Quét CCCD</title>
-<script src="https://unpkg.com/html5-qrcode"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CCCD Scanner</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
 </head>
 <body>
-
-<h2>Quét QR CCCD</h2>
-
-<label>Employee Code:</label>
-<input type="text" id="EmployeeCode" required><br><br>
-
-<div id="reader" style="width:300px;"></div>
-
-<!-- iFrame ẩn để submit form mà không mở trang -->
-<iframe name="hiddenFrame" style="display:none;"></iframe>
-
-<form id="cccdForm"
-      action="https://forms.office.com/Pages/ResponsePage.aspx?id=bvGrKaKVE02NUW2xt3XUW55Dn4IDf4VHgy8suSEk5GxURDNLM1ZBVU9VRTM0VlA4QTRDRVJKMFZaUi4u"
-      method="POST"
-      target="hiddenFrame">
-
-  <input type="hidden" name="CCCD" id="CCCD">
-  <input type="hidden" name="CMND" id="CMND">
-  <input type="hidden" name="FullName" id="FullName">
-  <input type="hidden" name="DOB" id="DOB">
-  <input type="hidden" name="Gender" id="Gender">
-  <input type="hidden" name="Address" id="Address">
-  <input type="hidden" name="IssueDate" id="IssueDate">
-  <input type="hidden" name="EmployeeCode" id="EmployeeCodeHidden">
-
-  <button type="submit" id="btnSubmit" disabled>Đang chờ quét...</button>
-</form>
-
-<script>
-// format ddMMyyyy -> dd/MM/yyyy
-function formatDate(s) {
-    if (s.length !== 8) return s;
-    return `${s.slice(0,2)}/${s.slice(2,4)}/${s.slice(4)}`;
-}
-
-function onScanSuccess(decodedText) {
-    let arr = decodedText.split("|").filter(x => x.trim() !== "");
-    if (arr.length !== 7) {
-        alert("QR không đúng định dạng CCCD!");
-        return;
-    }
-
-    document.getElementById("CCCD").value = arr[0];
-    document.getElementById("CMND").value = arr[1];
-    document.getElementById("FullName").value = arr[2];
-    document.getElementById("DOB").value = formatDate(arr[3]);
-    document.getElementById("Gender").value = arr[4];
-    document.getElementById("Address").value = arr[5];
-    document.getElementById("IssueDate").value = formatDate(arr[6]);
-
-    document.getElementById("btnSubmit").disabled = false;
-    document.getElementById("btnSubmit").innerText = "Submit";
-
-    alert("Đã quét thành công!");
-}
-
-new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }).render(onScanSuccess);
-
-// Chặn submit nếu thiếu Employee Code
-document.getElementById("cccdForm").addEventListener("submit", function(e) {
-    let emp = document.getElementById("EmployeeCode").value.trim();
-    if (!emp) {
-        alert("Vui lòng nhập Employee Code trước khi submit!");
-        e.preventDefault();
-        return false;
-    }
-    document.getElementById("EmployeeCodeHidden").value = emp;
-
-    alert("Gửi thành công!");
-});
-</script>
-
+  <div id="root"></div>
+  <script type="module">
+    // Paste React component code here (đã convert sang vanilla JS)
+  </script>
 </body>
 </html>
