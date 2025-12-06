@@ -9,6 +9,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
   <div id="root"></div>
@@ -22,9 +23,22 @@
       const [maNV, setMaNV] = useState('');
       const [submitting, setSubmitting] = useState(false);
       const [message, setMessage] = useState({ type: '', text: '' });
+      const [debugInfo, setDebugInfo] = useState('');
+      const [showAdmin, setShowAdmin] = useState(false);
+      const [adminPassword, setAdminPassword] = useState('');
+      const [records, setRecords] = useState([]);
       const videoRef = useRef(null);
       const canvasRef = useRef(null);
       const streamRef = useRef(null);
+      const scanningRef = useRef(false);
+
+      // Load dữ liệu từ localStorage
+      useEffect(() => {
+        const saved = localStorage.getItem('cccdRecords');
+        if (saved) {
+          setRecords(JSON.parse(saved));
+        }
+      }, []);
 
       useEffect(() => {
         return () => {
@@ -56,22 +70,55 @@
 
       const startCamera = async () => {
         try {
+          setDebugInfo('Đang yêu cầu quyền camera...');
+          setMessage({ type: '', text: '' });
+          
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment' }
+            video: { 
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            }
           });
+          
+          setDebugInfo('Đã có quyền camera, đang khởi động...');
           
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             streamRef.current = stream;
-            setScanning(true);
-            scanQRCode();
+            
+            videoRef.current.onloadedmetadata = () => {
+              setDebugInfo('Video đã sẵn sàng, đang phát...');
+              videoRef.current.play().then(() => {
+                setScanning(true);
+                scanningRef.current = true;
+                setDebugInfo('Đang quét mã QR... Hãy đưa CCCD vào khung');
+                requestAnimationFrame(scanQRCode);
+              }).catch(err => {
+                setDebugInfo('Lỗi play: ' + err.message);
+                setMessage({ type: 'error', text: 'Không thể phát video: ' + err.message });
+              });
+            };
           }
         } catch (error) {
-          setMessage({ type: 'error', text: 'Không thể truy cập camera. Vui lòng cấp quyền.' });
+          console.error('Camera error:', error);
+          setDebugInfo('Lỗi camera: ' + error.name + ' - ' + error.message);
+          let errorMsg = 'Không thể truy cập camera. ';
+          if (error.name === 'NotAllowedError') {
+            errorMsg += 'Vui lòng cấp quyền camera trong cài đặt trình duyệt.';
+          } else if (error.name === 'NotFoundError') {
+            errorMsg += 'Không tìm thấy camera trên thiết bị.';
+          } else if (error.name === 'NotReadableError') {
+            errorMsg += 'Camera đang được ứng dụng khác sử dụng.';
+          } else {
+            errorMsg += error.message;
+          }
+          setMessage({ type: 'error', text: errorMsg });
         }
       };
 
       const stopCamera = () => {
+        scanningRef.current = false;
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
           streamRef.current = null;
@@ -80,10 +127,13 @@
           videoRef.current.srcObject = null;
         }
         setScanning(false);
+        setDebugInfo('');
       };
 
-      const scanQRCode = async () => {
-        if (!scanning || !videoRef.current || !canvasRef.current) return;
+      const scanQRCode = () => {
+        if (!scanningRef.current || !videoRef.current || !canvasRef.current) {
+          return;
+        }
 
         const video = videoRef.current;
         const canvas = canvasRef.current;
@@ -92,60 +142,74 @@
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          if (canvas.width > 0 && canvas.height > 0) {
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+            
+            if (typeof jsQR !== 'undefined') {
+              const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: "dontInvert",
+              });
 
-          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-          if (code) {
-            const parsed = parseCCCDData(code.data);
-            if (parsed) {
-              setCccdData(parsed);
-              stopCamera();
-              setMessage({ type: 'success', text: 'Quét mã thành công!' });
-              return;
+              if (code) {
+                const parsed = parseCCCDData(code.data);
+                if (parsed) {
+                  setCccdData(parsed);
+                  stopCamera();
+                  setMessage({ type: 'success', text: 'Quét mã thành công!' });
+                  return;
+                }
+              }
             }
           }
         }
 
-        if (scanning) {
+        if (scanningRef.current) {
           requestAnimationFrame(scanQRCode);
         }
       };
 
-      const handleSubmit = async () => {
+      const handleSubmit = () => {
         if (!cccdData || !maNV.trim()) {
           setMessage({ type: 'error', text: 'Vui lòng nhập đầy đủ thông tin!' });
           return;
         }
 
         setSubmitting(true);
-        setMessage({ type: '', text: '' });
 
-        try {
-          const formData = new FormData();
-          formData.append('soCCCD', cccdData.soCCCD);
-          formData.append('hoTen', cccdData.hoTen);
-          formData.append('ngaySinh', cccdData.ngaySinh);
-          formData.append('gioiTinh', cccdData.gioiTinh);
-          formData.append('diaChi', cccdData.diaChi);
-          formData.append('ngayCap', cccdData.ngayCap);
-          formData.append('maNV', maNV);
-          formData.append('thoiGian', new Date().toLocaleString('vi-VN'));
+        const newRecord = {
+          id: Date.now(),
+          thoiGian: new Date().toLocaleString('vi-VN'),
+          soCCCD: cccdData.soCCCD,
+          hoTen: cccdData.hoTen,
+          ngaySinh: cccdData.ngaySinh,
+          gioiTinh: cccdData.gioiTinh,
+          diaChi: cccdData.diaChi,
+          ngayCap: cccdData.ngayCap,
+          maNV: maNV
+        };
 
-          const response = await fetch('https://script.google.com/macros/s/AKfycbxxEvzS7p2PUFS3yd8tiaGTGfJftaZI_p0TjNpxeRRAa3TGNFzRkW0-oRvWrY8kWyo9/exec', {
-            method: 'POST',
-            mode: 'no-cors',
-            body: formData
-          });
+        const updatedRecords = [...records, newRecord];
+        setRecords(updatedRecords);
+        localStorage.setItem('cccdRecords', JSON.stringify(updatedRecords));
 
-          setMessage({ type: 'success', text: 'Gửi thông tin thành công!' });
-          setCccdData(null);
-          setMaNV('');
-        } catch (error) {
-          setMessage({ type: 'error', text: 'Lỗi khi gửi dữ liệu. Vui lòng thử lại.' });
-        } finally {
-          setSubmitting(false);
+        setMessage({ type: 'success', text: 'Lưu thông tin thành công!' });
+        setSubmitting(false);
+        setCccdData(null);
+        setMaNV('');
+        
+        setTimeout(() => {
+          setMessage({ type: '', text: '' });
+        }, 3000);
+      };
+
+      const handleTestInput = () => {
+        const testData = '075400109724|273719287|Ngô Thị Lan|12102006|Nam|165, Tổ 43, Kp Tân Thạnh 2, Biên Hòa, Đồng Nai|28102024';
+        const parsed = parseCCCDData(testData);
+        if (parsed) {
+          setCccdData(parsed);
+          setMessage({ type: 'success', text: 'Đã load dữ liệu test!' });
         }
       };
 
@@ -154,6 +218,152 @@
         setMaNV('');
         setMessage({ type: '', text: '' });
       };
+
+      const handleAdminLogin = () => {
+        if (adminPassword === 'admin123') {
+          setShowAdmin(true);
+          setAdminPassword('');
+          setMessage({ type: '', text: '' });
+        } else {
+          setMessage({ type: 'error', text: 'Sai mật khẩu!' });
+        }
+      };
+
+      const handleExportExcel = () => {
+        if (records.length === 0) {
+          setMessage({ type: 'error', text: 'Chưa có dữ liệu để export!' });
+          return;
+        }
+
+        const worksheet = XLSX.utils.json_to_sheet(records.map(r => ({
+          'Thời gian': r.thoiGian,
+          'Số CCCD': r.soCCCD,
+          'Họ tên': r.hoTen,
+          'Ngày sinh': r.ngaySinh,
+          'Giới tính': r.gioiTinh,
+          'Địa chỉ': r.diaChi,
+          'Ngày cấp': r.ngayCap,
+          'Mã NV': r.maNV
+        })));
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh sách');
+        XLSX.writeFile(workbook, `CCCD_Records_${new Date().toLocaleDateString('vi-VN')}.xlsx`);
+        
+        setMessage({ type: 'success', text: 'Đã tải file Excel!' });
+      };
+
+      const handleDeleteRecord = (id) => {
+        const updatedRecords = records.filter(r => r.id !== id);
+        setRecords(updatedRecords);
+        localStorage.setItem('cccdRecords', JSON.stringify(updatedRecords));
+        setMessage({ type: 'success', text: 'Đã xóa!' });
+      };
+
+      const handleClearAll = () => {
+        if (window.confirm('Xóa toàn bộ dữ liệu? Hành động này không thể hoàn tác!')) {
+          setRecords([]);
+          localStorage.removeItem('cccdRecords');
+          setMessage({ type: 'success', text: 'Đã xóa toàn bộ dữ liệu!' });
+        }
+      };
+
+      if (showAdmin) {
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+            <div className="max-w-6xl mx-auto">
+              <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+                <div className="bg-gradient-to-r from-slate-700 to-slate-900 p-6 text-white">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h1 className="text-2xl font-bold">Quản lý dữ liệu CCCD</h1>
+                      <p className="text-slate-300 text-sm mt-1">Tổng: {records.length} bản ghi</p>
+                    </div>
+                    <button
+                      onClick={() => setShowAdmin(false)}
+                      className="px-4 py-2 bg-white text-slate-800 rounded-lg font-medium hover:bg-slate-100 transition"
+                    >
+                      Đóng
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-6">
+                  {message.text && (
+                    <div className={`mb-4 p-4 rounded-lg ${
+                      message.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+                    }`}>
+                      {message.text}
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 mb-6">
+                    <button
+                      onClick={handleExportExcel}
+                      className="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition flex items-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Tải Excel
+                    </button>
+                    <button
+                      onClick={handleClearAll}
+                      className="px-6 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition"
+                    >
+                      Xóa tất cả
+                    </button>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-100">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold">Thời gian</th>
+                          <th className="px-4 py-3 text-left font-semibold">Số CCCD</th>
+                          <th className="px-4 py-3 text-left font-semibold">Họ tên</th>
+                          <th className="px-4 py-3 text-left font-semibold">Ngày sinh</th>
+                          <th className="px-4 py-3 text-left font-semibold">Giới tính</th>
+                          <th className="px-4 py-3 text-left font-semibold">Mã NV</th>
+                          <th className="px-4 py-3 text-left font-semibold">Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {records.length === 0 ? (
+                          <tr>
+                            <td colSpan="7" className="px-4 py-8 text-center text-gray-500">
+                              Chưa có dữ liệu
+                            </td>
+                          </tr>
+                        ) : (
+                          records.map(record => (
+                            <tr key={record.id} className="border-t hover:bg-slate-50">
+                              <td className="px-4 py-3">{record.thoiGian}</td>
+                              <td className="px-4 py-3">{record.soCCCD}</td>
+                              <td className="px-4 py-3">{record.hoTen}</td>
+                              <td className="px-4 py-3">{record.ngaySinh}</td>
+                              <td className="px-4 py-3">{record.gioiTinh}</td>
+                              <td className="px-4 py-3 font-medium">{record.maNV}</td>
+                              <td className="px-4 py-3">
+                                <button
+                                  onClick={() => handleDeleteRecord(record.id)}
+                                  className="text-red-600 hover:text-red-800 font-medium"
+                                >
+                                  Xóa
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
 
       return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -165,6 +375,12 @@
               </div>
 
               <div className="p-6">
+                {debugInfo && (
+                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-xs">
+                    <strong>Debug:</strong> {debugInfo}
+                  </div>
+                )}
+
                 {message.text && (
                   <div className={`mb-4 p-4 rounded-lg flex items-center gap-2 ${
                     message.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
@@ -182,9 +398,14 @@
                         playsInline
                         muted
                         className="w-full h-full object-cover"
+                        style={{ transform: 'scaleX(-1)' }}
                       />
-                      <div className="absolute inset-0 border-4 border-blue-500 opacity-50"></div>
-                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-2 border-white rounded-lg"></div>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-64 h-64 border-2 border-white rounded-lg opacity-70"></div>
+                      </div>
+                      <div className="absolute bottom-4 left-4 right-4 text-white text-center text-sm bg-black bg-opacity-50 p-2 rounded">
+                        Đặt mã QR vào khung vuông
+                      </div>
                     </div>
                     <canvas ref={canvasRef} className="hidden" />
                     <button
@@ -197,16 +418,25 @@
                 )}
 
                 {!scanning && !cccdData && (
-                  <button
-                    onClick={startCamera}
-                    className="w-full mb-6 px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition flex items-center justify-center gap-2"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Quét mã QR CCCD
-                  </button>
+                  <div className="space-y-3">
+                    <button
+                      onClick={startCamera}
+                      className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      Quét mã QR CCCD
+                    </button>
+                    
+                    <button
+                      onClick={handleTestInput}
+                      className="w-full px-4 py-2 border-2 border-gray-300 text-gray-600 rounded-lg font-medium hover:bg-gray-50 transition text-sm"
+                    >
+                      🧪 Test với dữ liệu mẫu
+                    </button>
+                  </div>
                 )}
 
                 {cccdData && (
@@ -267,24 +497,48 @@
                         className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg font-medium hover:from-green-700 hover:to-green-800 transition disabled:opacity-50 flex items-center justify-center gap-2"
                       >
                         {submitting ? (
-                          <span>Đang gửi...</span>
+                          <span>Đang lưu...</span>
                         ) : (
                           <>
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
-                            Gửi
+                            Lưu
                           </>
                         )}
                       </button>
                     </div>
                   </div>
                 )}
+
+                <div className="mt-6 pt-6 border-t space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Mật khẩu HR (để xem dữ liệu)
+                    </label>
+                    <input
+                      type="password"
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      placeholder="Nhập mật khẩu"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                    />
+                  </div>
+                  <button
+                    onClick={handleAdminLogin}
+                    className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg font-medium hover:bg-slate-800 transition"
+                  >
+                    🔒 Xem dữ liệu (HR)
+                  </button>
+                  <p className="text-xs text-gray-500 text-center">
+                    Mật khẩu mặc định: admin123
+                  </p>
+                </div>
               </div>
             </div>
 
             <p className="text-center text-gray-600 text-sm mt-4">
-              Dành cho nhân viên công ty
+              Dành cho nhân viên công ty • Đã lưu: {records.length} bản ghi
             </p>
           </div>
         </div>
