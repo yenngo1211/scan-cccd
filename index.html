@@ -73,6 +73,9 @@
           setDebugInfo('Đang yêu cầu quyền camera...');
           setMessage({ type: '', text: '' });
           
+          // Bật scanning ngay để hiển thị UI
+          setScanning(true);
+          
           const stream = await navigator.mediaDevices.getUserMedia({
             video: { 
               facingMode: { ideal: 'environment' },
@@ -81,28 +84,24 @@
             }
           });
           
-          setDebugInfo('Đã có quyền camera, đang khởi động...');
+          setDebugInfo('Đã có quyền camera, đang khởi động video...');
           
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             streamRef.current = stream;
+            scanningRef.current = true;
             
-            videoRef.current.onloadedmetadata = () => {
-              setDebugInfo('Video đã sẵn sàng, đang phát...');
-              videoRef.current.play().then(() => {
-                setScanning(true);
-                scanningRef.current = true;
-                setDebugInfo('Đang quét mã QR... Hãy đưa CCCD vào khung');
-                requestAnimationFrame(scanQRCode);
-              }).catch(err => {
-                setDebugInfo('Lỗi play: ' + err.message);
-                setMessage({ type: 'error', text: 'Không thể phát video: ' + err.message });
-              });
-            };
+            // Đợi video sẵn sàng
+            await videoRef.current.play();
+            setDebugInfo('Camera đang hoạt động! Đưa mã QR vào khung.');
+            
+            // Bắt đầu quét
+            requestAnimationFrame(scanQRCode);
           }
         } catch (error) {
           console.error('Camera error:', error);
-          setDebugInfo('Lỗi camera: ' + error.name + ' - ' + error.message);
+          setScanning(false);
+          setDebugInfo('Lỗi: ' + error.name + ' - ' + error.message);
           let errorMsg = 'Không thể truy cập camera. ';
           if (error.name === 'NotAllowedError') {
             errorMsg += 'Vui lòng cấp quyền camera trong cài đặt trình duyệt.';
