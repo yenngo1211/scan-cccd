@@ -78,14 +78,22 @@
         try {
           const parts = qrText.split('|');
           if (parts.length >= 7) {
+            // Format ngày từ ddmmyyyy sang dd/mm/yyyy
+            const formatDate = (dateStr) => {
+              if (dateStr && dateStr.length === 8) {
+                return `${dateStr.substring(0,2)}/${dateStr.substring(2,4)}/${dateStr.substring(4,8)}`;
+              }
+              return dateStr;
+            };
+            
             return {
-              soCCCD: parts[0],
-              cmnd: parts[1],
-              hoTen: parts[2],
-              ngaySinh: parts[3],
-              gioiTinh: parts[4],
-              diaChi: parts[5],
-              ngayCap: parts[6]
+              soCCCD: parts[0] || '',
+              cmnd: parts[1] || '',
+              hoTen: parts[2] || '',
+              ngaySinh: formatDate(parts[3]),
+              gioiTinh: parts[4] || '',
+              diaChi: parts[5] || '',
+              ngayCap: formatDate(parts[6])
             };
           }
           return null;
@@ -214,6 +222,7 @@
           id: Date.now(),
           thoiGian: new Date().toLocaleString('vi-VN'),
           soCCCD: cccdData.soCCCD,
+          cmnd: cccdData.cmnd,
           hoTen: cccdData.hoTen,
           ngaySinh: cccdData.ngaySinh,
           gioiTinh: cccdData.gioiTinh,
@@ -310,6 +319,7 @@
         const worksheet = XLSX.utils.json_to_sheet(records.map(r => ({
           'Thời gian': r.thoiGian,
           'Số CCCD': r.soCCCD,
+          'Số CMND cũ': r.cmnd || '',
           'Họ tên': r.hoTen,
           'Ngày sinh': r.ngaySinh,
           'Giới tính': r.gioiTinh,
@@ -393,9 +403,12 @@
                         <tr>
                           <th className="px-4 py-3 text-left font-semibold">Thời gian</th>
                           <th className="px-4 py-3 text-left font-semibold">Số CCCD</th>
+                          <th className="px-4 py-3 text-left font-semibold">Số CMND</th>
                           <th className="px-4 py-3 text-left font-semibold">Họ tên</th>
                           <th className="px-4 py-3 text-left font-semibold">Ngày sinh</th>
                           <th className="px-4 py-3 text-left font-semibold">Giới tính</th>
+                          <th className="px-4 py-3 text-left font-semibold">Địa chỉ</th>
+                          <th className="px-4 py-3 text-left font-semibold">Ngày cấp</th>
                           <th className="px-4 py-3 text-left font-semibold">Mã NV</th>
                           <th className="px-4 py-3 text-left font-semibold">Thao tác</th>
                         </tr>
@@ -403,7 +416,7 @@
                       <tbody>
                         {records.length === 0 ? (
                           <tr>
-                            <td colSpan="7" className="px-4 py-8 text-center text-gray-500">
+                            <td colSpan="10" className="px-4 py-8 text-center text-gray-500">
                               Chưa có dữ liệu
                             </td>
                           </tr>
@@ -412,9 +425,12 @@
                             <tr key={record.id} className="border-t hover:bg-slate-50">
                               <td className="px-4 py-3">{record.thoiGian}</td>
                               <td className="px-4 py-3">{record.soCCCD}</td>
+                              <td className="px-4 py-3">{record.cmnd || '-'}</td>
                               <td className="px-4 py-3">{record.hoTen}</td>
                               <td className="px-4 py-3">{record.ngaySinh}</td>
                               <td className="px-4 py-3">{record.gioiTinh}</td>
+                              <td className="px-4 py-3 max-w-xs truncate" title={record.diaChi}>{record.diaChi}</td>
+                              <td className="px-4 py-3">{record.ngayCap}</td>
                               <td className="px-4 py-3 font-medium">{record.maNV}</td>
                               <td className="px-4 py-3">
                                 <button
@@ -536,6 +552,10 @@
                         <div className="flex">
                           <span className="font-medium w-32">Số CCCD:</span>
                           <span>{cccdData.soCCCD}</span>
+                        </div>
+                        <div className="flex">
+                          <span className="font-medium w-32">Số CMND cũ:</span>
+                          <span>{cccdData.cmnd || 'Không có'}</span>
                         </div>
                         <div className="flex">
                           <span className="font-medium w-32">Họ tên:</span>
