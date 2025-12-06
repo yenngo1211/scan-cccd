@@ -10,6 +10,18 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  
+  <!-- Fallback cho jsQR -->
+  <script>
+    window.addEventListener('load', function() {
+      if (typeof jsQR === 'undefined') {
+        console.error('jsQR failed to load from CDN');
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+        document.head.appendChild(script);
+      }
+    });
+  </script>
 </head>
 <body>
   <div id="root"></div>
@@ -32,6 +44,19 @@
       const canvasRef = useRef(null);
       const streamRef = useRef(null);
       const scanningRef = useRef(false);
+
+      // Kiểm tra jsQR đã load chưa
+      useEffect(() => {
+        const checkJsQR = () => {
+          if (typeof jsQR !== 'undefined') {
+            setDebugInfo('jsQR library đã sẵn sàng ✓');
+          } else {
+            setDebugInfo('Đang tải jsQR library...');
+            setTimeout(checkJsQR, 500);
+          }
+        };
+        checkJsQR();
+      }, []);
 
       // Load dữ liệu từ localStorage
       useEffect(() => {
@@ -147,8 +172,9 @@
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
             
-            if (typeof jsQR !== 'undefined') {
-              const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            // Kiểm tra jsQR có tồn tại không
+            if (typeof window.jsQR !== 'undefined') {
+              const code = window.jsQR(imageData.data, imageData.width, imageData.height, {
                 inversionAttempts: "attemptBoth",
               });
 
@@ -164,6 +190,9 @@
                   setDebugInfo('Mã QR không đúng định dạng CCCD. Thử lại...');
                 }
               }
+            } else {
+              // Nếu jsQR chưa load, thử load lại
+              setDebugInfo('jsQR đang tải, vui lòng đợi...');
             }
           }
         }
@@ -232,8 +261,8 @@
           
           // Thử đọc QR từ ảnh vừa chụp
           const imgData = context.getImageData(0, 0, canvas.width, canvas.height);
-          if (typeof jsQR !== 'undefined') {
-            const code = jsQR(imgData.data, imgData.width, imgData.height, {
+          if (typeof window.jsQR !== 'undefined') {
+            const code = window.jsQR(imgData.data, imgData.width, imgData.height, {
               inversionAttempts: "attemptBoth",
             });
             
@@ -248,10 +277,10 @@
                 setDebugInfo('Mã QR không đúng định dạng. Nội dung: ' + code.data.substring(0, 100));
               }
             } else {
-              setDebugInfo('Không phát hiện mã QR trong ảnh. Hãy thử lại.');
+              setDebugInfo('Không phát hiện mã QR trong ảnh. Hãy thử lại hoặc di chuyển camera gần hơn.');
             }
           } else {
-            setDebugInfo('Lỗi: jsQR library chưa load!');
+            setDebugInfo('LỖI: jsQR library chưa load! Vui lòng reload trang (F5).');
           }
         }
       };
