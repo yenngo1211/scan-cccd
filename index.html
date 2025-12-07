@@ -36,7 +36,6 @@
       const [submitting, setSubmitting] = useState(false);
       const [message, setMessage] = useState({ type: '', text: '' });
       const [debugInfo, setDebugInfo] = useState('');
-      const [capturedImage, setCapturedImage] = useState(null);
       const [showAdmin, setShowAdmin] = useState(false);
       const [adminPassword, setAdminPassword] = useState('');
       const [records, setRecords] = useState([]);
@@ -275,55 +274,6 @@
         }, 2000);
       };
 
-      const handleTestInput = () => {
-        const testData = '075400109724|273719287|Ngô Thị Lan|12102006|Nam|165, Tổ 43, Kp Tân Thạnh 2, Biên Hòa, Đồng Nai|28102024';
-        const parsed = parseCCCDData(testData);
-        if (parsed) {
-          setCccdData(parsed);
-          setMessage({ type: 'success', text: 'Đã load dữ liệu test!' });
-        }
-      };
-
-      const handleCaptureImage = () => {
-        if (videoRef.current && canvasRef.current) {
-          const video = videoRef.current;
-          const canvas = canvasRef.current;
-          const context = canvas.getContext('2d');
-          
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
-          
-          const imageData = canvas.toDataURL('image/png');
-          setCapturedImage(imageData);
-          setDebugInfo('Đã chụp ảnh! Đang phân tích...');
-          
-          // Thử đọc QR từ ảnh vừa chụp
-          const imgData = context.getImageData(0, 0, canvas.width, canvas.height);
-          if (typeof window.jsQR !== 'undefined') {
-            const code = window.jsQR(imgData.data, imgData.width, imgData.height, {
-              inversionAttempts: "attemptBoth",
-            });
-            
-            if (code && code.data) {
-              setDebugInfo('Phát hiện QR: ' + code.data);
-              const parsed = parseCCCDData(code.data);
-              if (parsed) {
-                setCccdData(parsed);
-                stopCamera();
-                setMessage({ type: 'success', text: 'Quét mã thành công từ ảnh!' });
-              } else {
-                setDebugInfo('Mã QR không đúng định dạng. Nội dung: ' + code.data.substring(0, 100));
-              }
-            } else {
-              setDebugInfo('Không phát hiện mã QR trong ảnh. Hãy thử lại hoặc di chuyển camera gần hơn.');
-            }
-          } else {
-            setDebugInfo('LỖI: jsQR library chưa load! Vui lòng reload trang (F5).');
-          }
-        }
-      };
-
       const handleReset = () => {
         setCccdData(null);
         setMaNV('');
@@ -488,8 +438,8 @@
           <div className="max-w-md mx-auto">
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white">
-                <h1 className="text-2xl font-bold text-center">Quét CCCD</h1>
-                <p className="text-center text-blue-100 text-sm mt-1">Hệ thống nhận diện nhân viên</p>
+                <h1 className="text-2xl font-bold text-center">Scan QR CCCD</h1>
+                <p className="text-center text-blue-100 text-sm mt-1">Hệ thống scan QR CCCD cập nhật thông tin nhân viên</p>
               </div>
 
               <div className="p-6">
@@ -526,29 +476,12 @@
                     </div>
                     <canvas ref={canvasRef} className="hidden" />
                     
-                    {/* Nút chụp ảnh để debug */}
-                    <div className="flex gap-2 mt-3">
-                      <button
-                        onClick={handleCaptureImage}
-                        className="flex-1 px-4 py-3 bg-yellow-500 text-white rounded-lg font-medium hover:bg-yellow-600 transition"
-                      >
-                        📸 Chụp & Phân tích
-                      </button>
-                      <button
-                        onClick={stopCamera}
-                        className="flex-1 px-4 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition"
-                      >
-                        Dừng quét
-                      </button>
-                    </div>
-                    
-                    {/* Hiển thị ảnh đã chụp */}
-                    {capturedImage && (
-                      <div className="mt-3">
-                        <p className="text-sm font-medium mb-2">Ảnh vừa chụp:</p>
-                        <img src={capturedImage} alt="Captured" className="w-full rounded-lg border-2 border-yellow-400" />
-                      </div>
-                    )}
+                    <button
+                      onClick={stopCamera}
+                      className="w-full mt-3 px-4 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition"
+                    >
+                      Dừng quét
+                    </button>
                   </div>
                 )}
 
@@ -563,13 +496,6 @@
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
                       Quét mã QR CCCD
-                    </button>
-                    
-                    <button
-                      onClick={handleTestInput}
-                      className="w-full px-4 py-2 border-2 border-gray-300 text-gray-600 rounded-lg font-medium hover:bg-gray-50 transition text-sm"
-                    >
-                      🧪 Test với dữ liệu mẫu
                     </button>
                   </div>
                 )}
@@ -669,9 +595,6 @@
                   >
                     🔒 Xem dữ liệu (HR)
                   </button>
-                  <p className="text-xs text-gray-500 text-center">
-                    Mật khẩu mặc định: admin123
-                  </p>
                 </div>
               </div>
             </div>
