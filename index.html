@@ -217,7 +217,9 @@
         }
 
         setSubmitting(true);
+        setDebugInfo('Đang gửi dữ liệu lên Google Sheets...');
 
+        // Lưu local
         const newRecord = {
           id: Date.now(),
           thoiGian: new Date().toLocaleString('vi-VN'),
@@ -231,18 +233,46 @@
           maNV: maNV
         };
 
+        // Gửi lên Google Sheets
+        const params = new URLSearchParams({
+          thoiGian: newRecord.thoiGian,
+          soCCCD: newRecord.soCCCD,
+          cmnd: newRecord.cmnd,
+          hoTen: newRecord.hoTen,
+          ngaySinh: newRecord.ngaySinh,
+          gioiTinh: newRecord.gioiTinh,
+          diaChi: newRecord.diaChi,
+          ngayCap: newRecord.ngayCap,
+          maNV: newRecord.maNV
+        });
+
+        const url = 'https://script.google.com/macros/s/AKfycbxT6YLQWrsigveloiKp36DHjQSNuUYFaolXngzFJDCefaXx2MVXLMC4cQOwBjxNz_K-/exec?' + params.toString();
+
+        // Gửi qua iframe
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = url;
+        document.body.appendChild(iframe);
+
+        // Lưu local backup
         const updatedRecords = [...records, newRecord];
         setRecords(updatedRecords);
         localStorage.setItem('cccdRecords', JSON.stringify(updatedRecords));
 
-        setMessage({ type: 'success', text: 'Lưu thông tin thành công!' });
-        setSubmitting(false);
-        setCccdData(null);
-        setMaNV('');
-        
+        setDebugInfo('Đã gửi lên Google Sheets!');
+
         setTimeout(() => {
-          setMessage({ type: '', text: '' });
-        }, 3000);
+          document.body.removeChild(iframe);
+          setMessage({ type: 'success', text: 'Lưu thành công! Dữ liệu đã gửi lên Google Sheets.' });
+          setSubmitting(false);
+          setCccdData(null);
+          setMaNV('');
+          
+          setTimeout(() => {
+            setMessage({ type: '', text: '' });
+            setDebugInfo('');
+          }, 3000);
+        }, 2000);
       };
 
       const handleTestInput = () => {
